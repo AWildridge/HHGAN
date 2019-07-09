@@ -59,6 +59,6 @@ class DiscriminatorNet(torch.nn.Module):
         error_fake.backward()
 
         # Update weights with gradients
-        optimizer.step()
+        self.optimizer.step()
 
         return error_real + error_fake, prediction_real, prediction_fake

@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch import nn, optim
 from torch.autograd.variable import Variable
@@ -14,7 +15,7 @@ NUM_FEATURES = 12
 
 # Load the data
 data = DiHiggsSignalMCDataset("/home/aj/CMS_Research/HH_4b/13TeV_Data/MC", download=False, generator_level=True,
-                              normalize=True)
+                              normalize=False)
 data_loader = torch.utils.data.DataLoader(data, batch_size=100, shuffle=True)
 num_batches = len(data_loader)
 
@@ -38,7 +39,7 @@ NUM_EPOCHS = 1
 
 # Training happens here
 for epoch in range(NUM_EPOCHS):
-    for n_batch, (real_batch, _) in enumerate(data_loader):
+    for n_batch, real_batch in enumerate(data_loader):
         N = real_batch.size(0)
         real_data = Variable(real_batch)
 
@@ -50,7 +51,7 @@ for epoch in range(NUM_EPOCHS):
         d_error, d_prediction_real, d_prediction_fake = discriminator.train(real_data, fake_data)
 
         # Generate fake data
-        fake_data = generator(noise(N))
+        fake_data = generator(noise(N, NUM_FEATURES))
         # Train Generator
         g_error = generator.train(discriminator, fake_data)
 

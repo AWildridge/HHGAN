@@ -17,11 +17,17 @@ class DiHiggsSignalMCDataset(torch.utils.data.Dataset):
         :param download(bool, optional): If true, downloads the dataset using XRootD (http://xrootd.org/) and puts it in
             root directory, If dataset is already downloaded, it is not downloaded again.
         :param generator_level (bool, optional): If true, determine the pt, eta, phi, and mass of the b-jets from the
-            generator level. If false, determine the pt, eta, phi, and mass from reconstruction level
+            generator level. If false, determine the pt, eta, phi, and mass from reconstruction level.
         :param normalize (bool, optional): If true, sets the 4 bottom quarks with transverse
             momentum, eta, phi, and mass to be between -1 and 1.
 
     Attributes:
+        root: The root directory of the dataset.
+        events: The 'Events' TTree in the ROOT file.
+        b_quarks_pt: The transverse momentum for all of the bottom quarks originating from a Higgs boson
+        b_quarks_eta: The pseudorapidity (https://en.wikipedia.org/wiki/Pseudorapidity) of the bottom quarks originating
+            from a Higgs boson
+        b_quarks_phi: The azimuthal angle of the bottom quarks originating from a Higgs boson
     """
 
     def __init__(self, root, split='train', download=False, generator_level=True, normalize=True):
@@ -33,6 +39,7 @@ class DiHiggsSignalMCDataset(torch.utils.data.Dataset):
             self.events = uproot.open("root://cmsxrootd.fnal.gov///store/mc/RunIIFall17NanoAODv5/GluGluToHHTo4B_node_"
                                       "SM_13TeV-madgraph_correctedcfg/NANOAODSIM/PU2017_12Apr2018_Nano1June2019_102X_"
                                       "mc2017_realistic_v7-v1/40000/22D6CC16-CF5C-AE43-81F8-C3E8BD66A35E.root")
+            self.events = self.events['Events']
         else:
             self.events = uproot.open(root + "/HH_Signal_MC.root")
             self.events = self.events['Events']
@@ -55,9 +62,9 @@ class DiHiggsSignalMCDataset(torch.utils.data.Dataset):
 
         # Make sure we are only looking HH->bbbb
         num_b_quarks = np.array([len(self.b_quarks_pt[e]) for e in range(len(self.b_quarks_pt))])
-        self.b_quarks_pt = np.array(self.b_quarks_pt[num_b_quarks == 4])
-        self.b_quarks_eta = np.array(self.b_quarks_eta[num_b_quarks == 4])
-        self.b_quarks_phi = np.array(self.b_quarks_phi[num_b_quarks == 4])
+        self.b_quarks_pt = self.b_quarks_pt[num_b_quarks == 4]
+        self.b_quarks_eta = self.b_quarks_eta[num_b_quarks == 4]
+        self.b_quarks_phi = self.b_quarks_phi[num_b_quarks == 4]
 
         if normalize:
             mean_pt = np.mean(self.b_quarks_pt)
@@ -73,6 +80,12 @@ class DiHiggsSignalMCDataset(torch.utils.data.Dataset):
             self.b_quarks_eta = (self.b_quarks_eta - mean_eta) / (eta_range / 2)
             self.b_quarks_phi = (self.b_quarks_phi - mean_phi) / (phi_range / 2)
 
+        self.events_array = np.array([[self.b_quarks_pt[i][0], self.b_quarks_eta[i][0], self.b_quarks_phi[i][0],
+                                       self.b_quarks_pt[i][1], self.b_quarks_eta[i][1], self.b_quarks_phi[i][1],
+                                       self.b_quarks_pt[i][2], self.b_quarks_eta[i][2], self.b_quarks_phi[i][2],
+                                       self.b_quarks_pt[i][3], self.b_quarks_eta[i][3], self.b_quarks_phi[i][3]]
+                                      for i in range(len(self.b_quarks_pt))])
+
     def __len__(self):
         return len(self.b_quarks_phi)
 
@@ -81,7 +94,4 @@ class DiHiggsSignalMCDataset(torch.utils.data.Dataset):
         :param index: The index of the event
         :return: The pt, phi, eta, and mass of the b and anti-b quarks in the event
         """
-        return (self.b_quarks_pt[index][0], self.b_quarks_phi[index][0], self.b_quarks_eta[index][0],
-                self.b_quarks_pt[index][1], self.b_quarks_phi[index][1], self.b_quarks_eta[index][1],
-                self.b_quarks_pt[index][2], self.b_quarks_phi[index][2], self.b_quarks_eta[index][2],
-                self.b_quarks_pt[index][3], self.b_quarks_phi[index][3], self.b_quarks_eta[index][3])
+        return self.events_array[index]

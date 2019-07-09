@@ -1,15 +1,17 @@
-import os
-import numpy as np
 import errno
-import torchvision.utils as vutils
-from tensorboardX import SummaryWriter
 from IPython import display
 from matplotlib import pyplot as plt
+import numpy as np
+import os
+import torchvision.utils as vutils
+from tensorboardX import SummaryWriter
 import torch
+from torch.autograd.variable import Variable
 
 """
     TensorBoard Data will be stored in './runs' path
 """
+
 
 def ones_target(size):
     """Tensor containing ones, with shape = size"""
@@ -19,6 +21,7 @@ def ones_target(size):
 def zeros_target(size):
     """Tensor containing zeros, with shape = size"""
     return Variable(torch.zeros(size, 1))
+
 
 class Logger:
 

@@ -50,7 +50,7 @@ class GeneratorNet(torch.nn.Module):
         error.backward()
 
         # Update weights with gradients
-        optimizer.step()
+        self.optimizer.step()
         return error
 
 
