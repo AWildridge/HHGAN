@@ -1,19 +1,22 @@
 import torch
 from torch import nn
 
+from utils import ones_target
+from utils import zeros_target
+
 
 class DiscriminatorNet(torch.nn.Module):
     """
     A three hidden-layer discriminative neural network
     """
 
-    def __init__(self):
+    def __init__(self, n_features_in):
         super(DiscriminatorNet, self).__init__()
-        n_features = 784
+        self.n_features = n_features_in
         n_out = 1
 
         self.hidden0 = nn.Sequential(
-            nn.Linear(n_features, 1024),
+            nn.Linear(self.n_features, 1024),
             nn.LeakyReLU(0.2),
             nn.Dropout(0.3)
         )
@@ -38,3 +41,24 @@ class DiscriminatorNet(torch.nn.Module):
         x = self.hidden2(x)
         x = self.out(x)
         return x
+
+    def train(self, real_data, fake_data):
+        # Reset gradients
+        self.optimizer.zero_grad()
+
+        # Train on Real Data
+        prediction_real = self(real_data)
+        # Calculate error and backpropagate
+        error_real = self.loss(prediction_real, ones_target(real_data.size(0)))
+        error_real.backward()
+
+        # Train on Fake Data
+        prediction_fake = self(fake_data)
+        # Calculate error and backpropagate
+        error_fake = self.loss(prediction_fake, zeros_target(real_data.size(0)))
+        error_fake.backward()
+
+        # Update weights with gradients
+        optimizer.step()
+
+        return error_real + error_fake, prediction_real, prediction_fake
