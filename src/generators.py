@@ -16,20 +16,23 @@ class GeneratorNet(torch.nn.Module):
         self.n_out = n_features_out
 
         self.hidden0 = nn.Sequential(
-            nn.Linear(self.n_features, 256),
-            nn.LeakyReLU(0.2)
+            nn.Linear(self.n_features, 50),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(p=0.5)
         )
         self.hidden1 = nn.Sequential(
-            nn.Linear(256, 512),
-            nn.LeakyReLU(0.2)
+            nn.Linear(50, 50),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(p=0.5)
         )
         self.hidden2 = nn.Sequential(
-            nn.Linear(512, 1024),
-            nn.LeakyReLU(0.2)
+            nn.Linear(50, 50),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(p=0.5)
         )
 
         self.out = nn.Sequential(
-            nn.Linear(1024, self.n_out),
+            nn.Linear(50, self.n_out),
             nn.Tanh()
         )
 
@@ -40,7 +43,7 @@ class GeneratorNet(torch.nn.Module):
         x = self.out(x)
         return x
 
-    def train(self, discriminator, fake_data):
+    def __train(self, discriminator, fake_data):
         # Reset gradients
         self.optimizer.zero_grad()
 
@@ -62,3 +65,4 @@ def noise(size, n_features):
     :param n_features: The number of random values to sample. The length of the 1D vector
     """
     return Variable(torch.randn(size, n_features))
+
