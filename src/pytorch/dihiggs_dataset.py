@@ -1,9 +1,10 @@
 import numpy as np
 import os
+import torch
 import uproot
+from torch.utils.data import Dataset
 
-
-class DiHiggsSignalMCDataset(torch.utils.data.Dataset):
+class DiHiggsSignalMCDataset(Dataset):
     """The DiHiggs signal Monte Carlo (MC) dataset used for the PyTorch DataLoader
 
     Args:
@@ -27,7 +28,7 @@ class DiHiggsSignalMCDataset(torch.utils.data.Dataset):
     def __init__(self, root, split='train', download=False, generator_level=True, normalize=True):
         root = self.root = os.path.expanduser(root)
         self.generator_level = generator_level
-
+        
         # Download the HH MC signal data if it doesn't exist already.
         if download:
             # Opens via XRootD protocol
@@ -50,8 +51,8 @@ class DiHiggsSignalMCDataset(torch.utils.data.Dataset):
             self.b_quarks_eta = self.events.array('GenPart_eta')[is_b_quark_mask][mother_is_higgs_mask]
             self.b_quarks_phi = self.events.array('GenPart_phi')[is_b_quark_mask][mother_is_higgs_mask]
             self.b_quarks_mass = self.events.array('GenPart_mass')[is_b_quark_mask][mother_is_higgs_mask]
-
-            assert (len(self.b_quarks_eta) == len(self.b_quarks_phi) == len(self.b_quarks_pt)), \
+            
+            assert (len(self.b_quarks_eta) == len(self.b_quarks_phi) == len(self.b_quarks_pt)),\
                 "Number of events is unequal in pt, eta, and phi"
 
             # Make sure we are only looking HH->bbbb
@@ -60,7 +61,7 @@ class DiHiggsSignalMCDataset(torch.utils.data.Dataset):
             self.b_quarks_eta = self.b_quarks_eta[num_b_quarks == 4]
             self.b_quarks_phi = self.b_quarks_phi[num_b_quarks == 4]
             self.b_quarks_mass = self.b_quarks_mass[num_b_quarks == 4]
-
+            
             if normalize:
                 self.min_pt = np.amin(self.b_quarks_pt)
                 self.min_eta = np.amin(self.b_quarks_eta)
@@ -72,19 +73,17 @@ class DiHiggsSignalMCDataset(torch.utils.data.Dataset):
                 self.phi_range = np.amax(self.b_quarks_phi) - np.amin(self.b_quarks_phi)
                 self.mass_range = np.amax(self.b_quarks_mass) - np.amin(self.b_quarks_mass)
 
-                # This ensures that all data is between -1 to 1 to help GAN with gradients/learning
-                self.b_quarks_pt = (self.b_quarks_pt - self.min_pt - (self.pt_range / 2)) / (self.pt_range / 2)
-                self.b_quarks_eta = (self.b_quarks_eta - self.min_eta - (self.eta_range / 2)) / (self.eta_range / 2)
-                self.b_quarks_phi = (self.b_quarks_phi - self.min_phi - (self.phi_range / 2)) / (self.phi_range / 2)
-                self.b_quarks_mass = (self.b_quarks_mass - self.min_mass - (self.mass_range / 2)) / (
-                            self.mass_range / 2)
-
-            self.events_array = np.array(
-                [[self.b_quarks_pt[i][0], self.b_quarks_eta[i][0], self.b_quarks_phi[i][0], self.b_quarks_mass[i][0],
-                  self.b_quarks_pt[i][1], self.b_quarks_eta[i][1], self.b_quarks_phi[i][1], self.b_quarks_mass[i][1],
-                  self.b_quarks_pt[i][2], self.b_quarks_eta[i][2], self.b_quarks_phi[i][2], self.b_quarks_mass[i][2],
-                  self.b_quarks_pt[i][3], self.b_quarks_eta[i][3], self.b_quarks_phi[i][3], self.b_quarks_mass[i][3], ]
-                 for i in range(len(self.b_quarks_pt))])
+                # This ensures that all data is between 0 to 1 to help GAN with gradients/learning
+                self.b_quarks_pt = (self.b_quarks_pt - self.min_pt) / (self.pt_range)
+                self.b_quarks_eta = (self.b_quarks_eta - self.min_eta) / (self.eta_range)
+                self.b_quarks_phi = (self.b_quarks_phi - self.min_phi) / (self.phi_range)
+                self.b_quarks_mass = (self.b_quarks_mass - self.min_mass) / (self.mass_range)
+                
+            self.events_array = np.array([[self.b_quarks_pt[i][0], self.b_quarks_eta[i][0], self.b_quarks_phi[i][0], self.b_quarks_mass[i][0], 
+                           self.b_quarks_pt[i][1], self.b_quarks_eta[i][1], self.b_quarks_phi[i][1], self.b_quarks_mass[i][1],
+                           self.b_quarks_pt[i][2], self.b_quarks_eta[i][2], self.b_quarks_phi[i][2], self.b_quarks_mass[i][2],
+                           self.b_quarks_pt[i][3], self.b_quarks_eta[i][3], self.b_quarks_phi[i][3], self.b_quarks_mass[i][3],]
+                          for i in range(len(self.b_quarks_pt))])
         else:
             self.n_features = 25
             self.jet_btags = self.events.array('Jet_btagDeepB')
@@ -92,7 +91,7 @@ class DiHiggsSignalMCDataset(torch.utils.data.Dataset):
             self.jet_etas = self.events.array('Jet_eta')
             self.jet_phis = self.events.array('Jet_phi')
             self.jet_masses = self.events.array('Jet_mass')
-
+            
             # Get rid of all b-tagged jets with score -2
             negative_two_mask = self.jet_btags != -2
             self.jet_btags = self.jet_btags[negative_two_mask]
@@ -103,14 +102,14 @@ class DiHiggsSignalMCDataset(torch.utils.data.Dataset):
             # Find events with >=3 b-tagged jets and 5 jets
             self.jet_btags = self.jet_btags[has_3_btagged_jets]
             has_atleast_5_jets = np.array([len(self.jet_btags[i]) >= 5 for i in range(len(self.jet_btags))])
-
+            
             # Apply all of the masks on btags scores, pts, etas, phis, and masses
             self.jet_btags = self.jet_btags[has_atleast_5_jets]
             self.jet_pts = self.jet_pts[negative_two_mask][has_3_btagged_jets][has_atleast_5_jets]
             self.jet_etas = self.jet_etas[negative_two_mask][has_3_btagged_jets][has_atleast_5_jets]
             self.jet_phis = self.jet_phis[negative_two_mask][has_3_btagged_jets][has_atleast_5_jets]
             self.jet_masses = self.jet_masses[negative_two_mask][has_3_btagged_jets][has_atleast_5_jets]
-
+            
             # Sort the jets based on b-tag score so that top 5 can be grabbed
             sorted_indices = [self.jet_btags[i].argsort()[::-1] for i in range(len(self.jet_btags))]
             self.jet_btags = [self.jet_btags[i][sorted_indices[i]][:5] for i in range(len(sorted_indices))]
@@ -118,7 +117,7 @@ class DiHiggsSignalMCDataset(torch.utils.data.Dataset):
             self.jet_etas = [self.jet_etas[i][sorted_indices[i]][:5] for i in range(len(sorted_indices))]
             self.jet_phis = [self.jet_phis[i][sorted_indices[i]][:5] for i in range(len(sorted_indices))]
             self.jet_masses = [self.jet_masses[i][sorted_indices[i]][:5] for i in range(len(sorted_indices))]
-
+            
             if normalize:
                 self.min_btags = np.amin(self.jet_btags)
                 self.min_pt = np.amin(self.jet_pts)
@@ -132,23 +131,19 @@ class DiHiggsSignalMCDataset(torch.utils.data.Dataset):
                 self.phi_range = np.amax(self.jet_phis) - np.amin(self.jet_phis)
                 self.mass_range = np.amax(self.jet_masses) - np.amin(self.jet_masses)
 
-                # This ensures that all data is between -1 to 1 to help GAN with gradients/learning
-                self.jet_btags = (self.jet_btags - self.min_btags - (self.btag_range / 2)) / (self.btag_range / 2)
-                self.jet_pts = (self.jet_pts - self.min_pt - (self.pt_range / 2)) / (self.pt_range / 2)
-                self.jet_etas = (self.jet_etas - self.min_eta - (self.eta_range / 2)) / (self.eta_range / 2)
-                self.jet_phis = (self.jet_phis - self.min_phi) - (self.phi_range / 2) / (self.phi_range / 2)
-                self.jet_masses = (self.jet_masses - self.min_mass - (self.mass_range / 2)) / (self.mass_range / 2)
-            self.events_array = np.array([[self.jet_pts[i][0], self.jet_etas[i][0], self.jet_phis[i][0],
-                                           self.jet_masses[i][0], self.jet_btags[i][0],
-                                           self.jet_pts[i][1], self.jet_etas[i][1], self.jet_phis[i][1],
-                                           self.jet_masses[i][1], self.jet_btags[i][1],
-                                           self.jet_pts[i][2], self.jet_etas[i][2], self.jet_phis[i][2],
-                                           self.jet_masses[i][2], self.jet_btags[i][2],
-                                           self.jet_pts[i][3], self.jet_etas[i][3], self.jet_phis[i][3],
-                                           self.jet_masses[i][3], self.jet_btags[i][3],
-                                           self.jet_pts[i][4], self.jet_etas[i][4], self.jet_phis[i][4],
-                                           self.jet_masses[i][4], self.jet_btags[i][4]]
-                                          for i in range(len(self.jet_pts))])
+                # This ensures that all data is between 0 to 1 to help GAN with gradients/learning
+                self.jet_btags = (self.jet_btags - self.min_btags) / (self.btag_range)
+                self.jet_pts = (self.jet_pts - self.min_pt) / (self.pt_range)
+                self.jet_etas = (self.jet_etas - self.min_eta) / (self.eta_range)
+                self.jet_phis = (self.jet_phis - self.min_phi) / (self.phi_range)
+                self.jet_masses = (self.jet_masses - self.min_mass) / (self.mass_range)
+            self.events_array = np.array([[self.jet_pts[i][0], self.jet_etas[i][0], self.jet_phis[i][0], self.jet_masses[i][0], self.jet_btags[i][0], 
+                           self.jet_pts[i][1], self.jet_etas[i][1], self.jet_phis[i][1], self.jet_masses[i][1], self.jet_btags[i][1],
+                           self.jet_pts[i][2], self.jet_etas[i][2], self.jet_phis[i][2], self.jet_masses[i][2], self.jet_btags[i][2],
+                           self.jet_pts[i][3], self.jet_etas[i][3], self.jet_phis[i][3], self.jet_masses[i][3], self.jet_btags[i][3],
+                           self.jet_pts[i][4], self.jet_etas[i][4], self.jet_phis[i][4], self.jet_masses[i][4], self.jet_btags[i][4]]
+                          for i in range(len(self.jet_pts))])
+
 
     def __len__(self):
         if self.generator_level:

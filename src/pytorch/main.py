@@ -136,3 +136,8 @@ for epoch in range(NUM_EPOCHS):
                 c_btag.SaveAs("/output/btaggif/gan_btag"+str(num_tests)+".png")
 
                 num_tests += 1
+
+torch.save(generator.state_dict(), "gan_generator_1k_epochs.pt")
+torch.save(discriminator.state_dict(), "gan_discriminator_1k_epochs.pt")
+torch.save(discriminator_errors, "discriminator_errors.pt")
+torch.save(generator_errors, "generator_errors.pt")
