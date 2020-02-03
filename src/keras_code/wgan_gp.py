@@ -1,30 +1,29 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sat Oct 26 00:28:21 2019
-
-@author: user
-"""
-
-from __future__ import print_function, division
-
-from keras.utils import plot_model
-from keras.datasets import mnist
-from keras.layers.merge import _Merge
-from keras.layers import Input, Dense, Reshape, Flatten, Dropout
-from keras.layers import BatchNormalization, Activation, ZeroPadding2D
-from keras.layers.advanced_activations import LeakyReLU
-from keras.layers.convolutional import UpSampling2D, Conv2D
-from keras.models import Sequential, Model
-from tensorflow.keras.optimizers import RMSprop, Adam
-from functools import partial
-
-import keras.backend as K
-
-import matplotlib.pyplot as plt
+from __future__ import division, print_function
 
 import sys
+from functools import partial
 
+import matplotlib.pyplot as plt
 import numpy as np
+from tensorflow.keras.optimizers import Adam, RMSprop
+import tensorflow as tf
+
+import keras.backend as K
+from keras.datasets import mnist
+from keras.layers import (Activation, BatchNormalization, Dense, Dropout,
+                          Flatten, Input, Reshape, ZeroPadding2D)
+from keras.layers.advanced_activations import LeakyReLU
+from keras.layers.convolutional import Conv2D, UpSampling2D
+from keras.layers.merge import _Merge
+from keras.models import Model, Sequential
+from keras.utils import plot_model
+"""
+Based on code by Erik Linder-Norén: https://github.com/eriklindernoren/Keras-GAN
+Modified to accept inputs from non-image data and fixed some training issues
+resulting from calculating the loss functions incorrectly. Also added more functionality
+for monitoring the training of the WGAN-GP
+"""
+
 
 LAMBDA = 15
 
@@ -39,10 +38,9 @@ class RandomWeightedAverage(_Merge):
 
 class WGANGP():
     def __init__(self):
-        self.img_rows = 25
-        self.img_cols = 1
-        self.channels = 1
-        self.img_shape = (self.img_rows,)
+
+        self.feature_dim = 25
+        self.img_shape = (self.feature_dim,)
         self.latent_dim = 200
 
         # Following parameter and optimizer set as recommended in paper
@@ -62,20 +60,20 @@ class WGANGP():
         # Freeze generator's layers while training critic
         self.generator.trainable = False
 
-        # Image input (real sample)
-        real_img = Input(shape=self.img_shape)
+        # MC input
+        mc_event = Input(shape=self.img_shape)
 
         # Noise input
-        z_disc = Input(shape=(self.latent_dim,))
+        latent_input = Input(shape=(self.latent_dim,))
         # Generate image based of noise (fake sample)
-        fake_img = self.generator(z_disc)
+        generated_event = self.generator(latent_input)
 
         # Discriminator determines validity of the real and fake images
-        fake = self.critic(fake_img)
-        valid = self.critic(real_img)
+        generated_validity = self.critic(generated_event)
+        mc_validity = self.critic(mc_event)
 
         # Construct weighted average between real and fake images
-        interpolated_img = RandomWeightedAverage()([real_img, fake_img])
+        interpolated_img = RandomWeightedAverage()([mc_event, generated_event])
         # Determine validity of weighted sample
         validity_interpolated = self.critic(interpolated_img)
 
@@ -85,8 +83,8 @@ class WGANGP():
                                   averaged_samples=interpolated_img)
         partial_gp_loss.__name__ = 'gradient_penalty'  # Keras requires function names
 
-        self.critic_model = Model(inputs=[real_img, z_disc],
-                                  outputs=[valid, fake, validity_interpolated])
+        self.critic_model = Model(inputs=[mc_event, latent_input],
+                                  outputs=[mc_validity, generated_validity, validity_interpolated])
         self.critic_model.compile(loss=[self.wasserstein_loss,
                                         self.wasserstein_loss,
                                         partial_gp_loss],
@@ -109,24 +107,27 @@ class WGANGP():
         valid = self.critic(img)
         # Defines generator model
         self.generator_model = Model(z_gen, valid)
-        self.generator_model.compile(loss=self.wasserstein_loss, optimizer=optimizer)
+        self.generator_model.compile(
+            loss=self.wasserstein_loss, optimizer=optimizer)
 
     def gradient_penalty_loss(self, y_true, y_pred, averaged_samples):
         """
         Computes gradient penalty based on prediction and weighted real / fake samples
         """
-        gradients = K.gradients(y_pred, averaged_samples)[0]
+        self.gradients = K.gradients(y_pred, averaged_samples)[0]
+
         # compute the euclidean norm by squaring ...
-        gradients_sqr = K.square(gradients)
+        self.gradients_sqr = K.square(self.gradients)
         #   ... summing over the rows ...
-        gradients_sqr_sum = K.sum(gradients_sqr,
-                                  axis=np.arange(1, len(gradients_sqr.shape)))
+        self.gradients_sqr_sum = K.sum(self.gradients_sqr,
+                                  axis=np.arange(1, len(self.gradients_sqr.shape)))
         #   ... and sqrt
-        gradient_l2_norm = K.sqrt(gradients_sqr_sum)
+        self.gradient_l2_norm = K.sqrt(self.gradients_sqr_sum)
+
         # compute lambda * (1 - ||grad||)^2 still for each single sample
-        gradient_penalty = K.square(1 - gradient_l2_norm)
+        self.gradient_penalty = K.square(1 - self.gradient_l2_norm)
         # return the mean as loss over all the batch samples
-        return K.mean(gradient_penalty)
+        return K.mean(self.gradient_penalty)
 
     def wasserstein_loss(self, y_true, y_pred):
         return K.mean(y_true * y_pred)
@@ -188,7 +189,6 @@ class WGANGP():
         return Model(img, validity)
 
     def train(self, epochs, batch_size, sample_interval=50):
-
         # Load the dataset
         X_train = np.load('NHETraining.npy')
 
@@ -215,6 +215,13 @@ class WGANGP():
                 # Train the critic
                 d_loss = self.critic_model.train_on_batch([imgs, noise],
                                                           [valid, fake, dummy])
+                '''generated_events = self.generator(noise)
+                interpolated_img = RandomWeightedAverage()([imgs, generated_events])
+                validity_interpolated = self.critic(interpolated_img)
+                gradient_penalty_loss(validity_interpolated, validity_interpolated, interpolated_img)
+                print('Using gradients: ' + str(self.gradients.eval()))
+                print('l2 norm is: ' + str(self.gradient_l2_norm.eval()))
+                print('gradient penalty is: ' + str(self.gradient_penalty.eval()))'''
 
             # ---------------------
             #  Train Generator
@@ -224,7 +231,8 @@ class WGANGP():
 
             # Plot the progress
             print(
-                "%d [D loss: %f + %f = %f [G loss: %f]" % (epoch, d_loss[0], d_loss[1], d_loss[0] + d_loss[1], g_loss))
+                "%d [D loss: %f + %f = %f [G loss: %f]" % (epoch, -(d_loss[0] + d_loss[1]), d_loss[2],
+                                                         -(d_loss[0] + d_loss[1]) + d_loss[2], g_loss))
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:

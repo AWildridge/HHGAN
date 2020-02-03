@@ -286,7 +286,7 @@ def reconstruct_higgs(all_pts, all_etas, all_phis, all_masses, all_btags):
     gan_masses = np.where(mask, gan_masses, np.nan)
     gan_btags = np.where(mask, gan_btags, np.nan)
     
-    is_b = gan_btags > 0.185
+    is_b = gan_btags > 0.226
     has_4bs = np.count_nonzero(is_b, axis=2) >= 4
     nEventsWith4bs = np.count_nonzero(has_4bs, axis = 1)
     #print("Number of events with 4 b-tagged jets is " + str(nEventsWith4bs) + ' out of a total of ' + str(nEvents) + ' events.')
